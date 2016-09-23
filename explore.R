@@ -48,8 +48,13 @@ test_res$train = NULL
 train_res$MSSubClass = NULL
 test_res$MSSubClass = NULL
 
+#library(Boruta)
+#bt = Boruta(train_res,train_res$SalePrice)
+#m = lm(SalePrice ~ . - Id, data = train_res)
+
 library(randomForest)
-rf <- randomForest(SalePrice~.,train_res)
+#rf <- randomForest(SalePrice ~ MSZoning + LotArea + Street + LotConfig + LandSlope + Neighborhood + Condition1 + Condition2 + OverallQual + OverallCond + YearBuilt + RoofMatl + RoofStyle + MasVnrArea + ExterQual + BsmtQual + BsmtExposure + BsmtFinSF1 + BsmtFinSF2 + X1stFlrSF +X2ndFlrSF + KitchenQual + GarageQual +GarageCond + GarageArea + PoolArea + PoolQC + Fireplaces + Functional + WoodDeckSF + Fence + SaleCondition + BedroomAbvGr + KitchenAbvGr + FullBath, data = train_res)
+rf = randomForest(SalePrice ~ ., data = train_res)
 p = as.data.frame(predict(rf, newdata = test_res))
 
 colnames(p) = c("SalePrice")
