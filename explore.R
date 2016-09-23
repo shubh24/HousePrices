@@ -43,8 +43,10 @@ test_res = subset(df, df$train == 0)
 train_res$train = NULL
 test_res$train = NULL
 
-train_res$MSSubClass = as.factor(train_res$MSSubClass)
-test_res$MSSubClass = as.factor(test_res$MSSubClass)
+# train_res$MSSubClass = as.factor(train_res$MSSubClass)
+# test_res$MSSubClass = as.factor(test_res$MSSubClass)
+train_res$MSSubClass = NULL
+test_res$MSSubClass = NULL
 
 library(randomForest)
 rf <- randomForest(SalePrice~.,train_res)
