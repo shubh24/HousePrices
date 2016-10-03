@@ -4,11 +4,24 @@ test = read.csv("test.csv", stringsAsFactors = FALSE)
 train$train = 1
 test$train = 0
 test$SalePrice = -1
+train$SalePrice = log(1 + train$SalePrice)
 
 df = rbind(train, test)
 
-variables <- names(df)
-variables <- variables[!(variables %in%  c("SalePrice","train"))]
+df$age = df$YrSold - df$YearBuilt
+df$mod_age = df$YrSold - df$YearRemodAdd
+df$modified = as.factor(df$age - df$mod_age > 0)
+df$garage_age = df$YrSold - df$GarageYrBlt
+df$YearBuilt = as.factor(df$YearBuilt)
+df$YearRemodAdd = as.factor(df$YearRemodAdd)
+df$GarageYrBlt = as.factor(df$GarageYrBlt)
+
+df$MoYo = as.factor(paste(df$MoSold, df$YrSold, sep = "-"))
+df$YrSold = as.factor(df$YrSold)
+df$MoSold = as.factor(df$MoSold)
+df$MSSubClass = as.factor(df$MSSubClass)
+df$OverallQual = as.factor(df$OverallQual)
+df$OverallCond = as.factor(df$OverallCond)
 
 for(variable in variables)
 {
@@ -27,7 +40,10 @@ for(variable in variables)
 
 }
 
-# Deal with factors
+variables <- names(df)
+variables <- variables[!(variables %in%  c("SalePrice", "train", "Id", "MoYo", "age"))] #idk why moyo and age are bringing R2 down!
+
+# Deal with factors, and log the numeric variables!
 for(variable in variables)
 {
   if(is.character(df[[variable]]))
@@ -35,7 +51,23 @@ for(variable in variables)
     levels <- sort(unique(df[[variable]]))
     df[[variable]] <- factor(df[[variable]],levels=levels)
   }
+  else if (is.numeric(df[[variable]])){ #now, only log the SF variables
+    df[[variable]] = log(1 + df[[variable]])
+  }
 }
+
+train$YrSold = as.factor(train$YrSold)
+price_ave = aggregate(SalePrice ~ YrSold, data = train, FUN = mean)
+colnames(price_ave) = c("YrSold", "price_ave")
+df = merge(df, price_ave, by = "YrSold")
+
+train$MoSold = as.factor(train$MoSold)
+price_ave_month = aggregate(SalePrice ~ MoSold, data = train, FUN = mean)
+colnames(price_ave_month) = c("MoSold", "price_ave_month")
+df = merge(df, price_ave_month, by = "MoSold")
+
+variables <- names(df)
+variables <- variables[!(variables %in%  c("SalePrice", "train", "Id", "MoYo", "age"))] #idk why moyo and age are bringing R2 down!
 
 train_res = subset(df, df$train == 1)
 test_res = subset(df, df$train == 0)
@@ -43,20 +75,39 @@ test_res = subset(df, df$train == 0)
 train_res$train = NULL
 test_res$train = NULL
 
-# train_res$MSSubClass = as.factor(train_res$MSSubClass)
-# test_res$MSSubClass = as.factor(test_res$MSSubClass)
-train_res$MSSubClass = NULL
-test_res$MSSubClass = NULL
+library(h2o)
+h2o.init()
+write.table(train_res, gzfile('./train.csv.gz'),quote=F,sep=',',row.names=F)
+write.table(test_res, gzfile('./test.csv.gz'),quote=F,sep=',',row.names=F)
+
+train_h2o = h2o.uploadFile("./train.csv.gz", destination_frame = "house_prices_train")
+test_h2o = h2o.uploadFile("./test.csv.gz", destination_frame = "house_prices_test")
+
+rf = h2o.randomForest(x = variables, y = "SalePrice", training_frame = train_h2o, ntrees = 200, max_depth = 50)
+res = exp(predict(rf, test_h2o)) + 1
+sp = as.vector(res)
+ids = as.vector(test_res$Id)
+pred <- data.frame(Id = ids, SalePrice = sp)
+write.csv(pred, "submission_rf_h2o.csv", row.names = FALSE)
+
+# require(caTools)
+# set.seed(101) 
+# sample = sample.split(train_res, SplitRatio = .75)
+# train_train = subset(train_res, sample == TRUE)
+# val_train = subset(train_res, sample == FALSE)
+# write.table(train_train, gzfile('./train.csv.gz'),quote=F,sep=',',row.names=F)
+# write.table(val_train, gzfile('./val.csv.gz'),quote=F,sep=',',row.names=F)
+# write.table(test_res, gzfile('./test.csv.gz'),quote=F,sep=',',row.names=F)
+# train_h2o = h2o.uploadFile("./train.csv.gz", destination_frame = "house_prices_train")
+# val_h2o = h2o.uploadFile("./val.csv.gz", destination_frame = "house_prices_val")
+# test_h2o = h2o.uploadFile("./test.csv.gz", destination_frame = "house_prices_test")
+# gbm <- h2o.gbm(x = variables, y = "SalePrice", training_frame = train_h2o, validation_frame = val_h2o, ntrees = 1000, learn_rate = 0.01, sample_rate = 0.8, col_sample_rate = 0.8, stopping_rounds = 5, stopping_tolerance = 1e-4, stopping_metric = "r2")
+# res = exp(predict(rf, test_h2o)) + 1
+# sp = as.vector(res)
+# ids = as.vector(test_res$Id)
+# pred <- data.frame(Id = ids, SalePrice = sp)
+# write.csv(pred, "submission_gbm_h2o.csv", row.names = FALSE)
 
 #library(Boruta)
 #bt = Boruta(train_res,train_res$SalePrice)
 #m = lm(SalePrice ~ . - Id, data = train_res)
-
-library(randomForest)
-#rf <- randomForest(SalePrice ~ MSZoning + LotArea + Street + LotConfig + LandSlope + Neighborhood + Condition1 + Condition2 + OverallQual + OverallCond + YearBuilt + RoofMatl + RoofStyle + MasVnrArea + ExterQual + BsmtQual + BsmtExposure + BsmtFinSF1 + BsmtFinSF2 + X1stFlrSF +X2ndFlrSF + KitchenQual + GarageQual +GarageCond + GarageArea + PoolArea + PoolQC + Fireplaces + Functional + WoodDeckSF + Fence + SaleCondition + BedroomAbvGr + KitchenAbvGr + FullBath, data = train_res)
-rf = randomForest(SalePrice ~ ., data = train_res)
-p = as.data.frame(predict(rf, newdata = test_res))
-
-colnames(p) = c("SalePrice")
-
-write.csv(p,file="submission_rf.csv", row.names=TRUE)
