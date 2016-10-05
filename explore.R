@@ -15,6 +15,10 @@ df$garage_age = df$YrSold - df$GarageYrBlt
 df$YearBuilt = as.factor(df$YearBuilt)
 df$YearRemodAdd = as.factor(df$YearRemodAdd)
 df$GarageYrBlt = as.factor(df$GarageYrBlt)
+df$FullBath = as.factor(df$FullBath)
+df$HalfBath = as.factor(df$HalfBath)
+df$BsmtFullBath = as.factor(df$BsmtFullBath)
+df$BsmtHalfBath = as.factor(df$BsmtHalfBath)
 
 df$MoYo = as.factor(paste(df$MoSold, df$YrSold, sep = "-"))
 df$YrSold = as.factor(df$YrSold)
@@ -23,22 +27,21 @@ df$MSSubClass = as.factor(df$MSSubClass)
 df$OverallQual = as.factor(df$OverallQual)
 df$OverallCond = as.factor(df$OverallCond)
 
-for(variable in variables)
-{
-  if(any(is.na(df[[variable]])))
-  {
-    print(paste(variable,"-",class(df[[variable]])))
-    if(is.character(df[[variable]]))
-    {
-      df[[variable]][is.na(df[[variable]])] <- "Missing"
-    }
-    else
-    {
-      df[[variable]][is.na(df[[variable]])] <- mean(df[[variable]],na.rm=TRUE)
-    }
-  }
-
-}
+# for(variable in variables)
+# {
+#   if(any(is.na(df[[variable]])))
+#   {
+#     if(is.character(df[[variable]]))
+#     {
+#       # df[[variable]][is.na(df[[variable]])] <- "Missing"
+#     }
+#     else
+#     {
+#       df[[variable]][is.na(df[[variable]])] <- mean(df[[variable]],na.rm=TRUE)
+#     }
+#   }
+# 
+# }
 
 variables <- names(df)
 variables <- variables[!(variables %in%  c("SalePrice", "train", "Id", "MoYo", "age"))] #idk why moyo and age are bringing R2 down!
@@ -68,15 +71,16 @@ for(variable in variables)
 # }
 
 
-train$YrSold = as.factor(train$YrSold)
-price_ave = aggregate(SalePrice ~ YrSold, data = train, FUN = mean)
-colnames(price_ave) = c("YrSold", "price_ave")
-df = merge(df, price_ave, by = "YrSold")
-
-train$MoSold = as.factor(train$MoSold)
-price_ave_month = aggregate(SalePrice ~ MoSold, data = train, FUN = mean)
-colnames(price_ave_month) = c("MoSold", "price_ave_month")
-df = merge(df, price_ave_month, by = "MoSold")
+# Not giving any improvements
+# train$YrSold = as.factor(train$YrSold)
+# price_ave = aggregate(SalePrice ~ YrSold, data = train, FUN = mean)
+# colnames(price_ave) = c("YrSold", "price_ave")
+# df = merge(df, price_ave, by = "YrSold")
+# 
+# train$MoSold = as.factor(train$MoSold)
+# price_ave_month = aggregate(SalePrice ~ MoSold, data = train, FUN = mean)
+# colnames(price_ave_month) = c("MoSold", "price_ave_month")
+# df = merge(df, price_ave_month, by = "MoSold")
 
 variables <- names(df)
 variables <- variables[!(variables %in%  c("SalePrice", "train", "Id", "MoYo", "age"))] #idk why moyo and age are bringing R2 down!
@@ -94,13 +98,25 @@ write.table(test_res, gzfile('./test.csv.gz'),quote=F,sep=',',row.names=F)
 
 train_h2o = h2o.uploadFile("./train.csv.gz", destination_frame = "house_prices_train")
 test_h2o = h2o.uploadFile("./test.csv.gz", destination_frame = "house_prices_test")
-#Try looking at moving averages, and better ways to impute missing vals, also remove outliers!
-rf = h2o.randomForest(x = variables, y = "SalePrice", training_frame = train_h2o, ntrees = 200, max_depth = 50)
+#Try looking at moving averages, and better ways to impute missing vals --> removed, also remove outliers --> don't seem like any outliers present!
+rf_prev = h2o.randomForest(x = variables, y = "SalePrice", training_frame = train_h2o, ntrees = 200, max_depth = 50)
+
+a = h2o.varimp(rf_prev)
+sel_vars = a$variable[1:30]
+rf = h2o.randomForest(x = sel_vars, y = "SalePrice", training_frame = train_h2o, ntrees = 200, max_depth = 50)
+
 res = exp(predict(rf, test_h2o)) + 1
 sp = as.vector(res)
 ids = as.vector(test_res$Id)
 pred <- data.frame(Id = ids, SalePrice = sp)
 write.csv(pred, "submission_rf_h2o.csv", row.names = FALSE)
+
+# glm = h2o.glm(x = variables, y = "SalePrice", training_frame = train_h2o,family = "gaussian")
+# res = exp(predict(glm, test_h2o)) + 1
+# sp = as.vector(res)
+# ids = as.vector(test_res$Id)
+# pred <- data.frame(Id = ids, SalePrice = sp)
+# write.csv(pred, "submission_glm_h2o.csv", row.names = FALSE)
 
 # require(caTools)
 # set.seed(101) 
