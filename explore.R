@@ -43,6 +43,8 @@ for(variable in variables)
 variables <- names(df)
 variables <- variables[!(variables %in%  c("SalePrice", "train", "Id", "MoYo", "age"))] #idk why moyo and age are bringing R2 down!
 
+sf_vars = c("WoodDeckSF", "OpenPorchSF", "BsmtFinSF1", "BsmtFinSF2", "BsmtUnfSF", "TotalBsmtSF", "X1stFlrSF", "X2ndFlrSF", "LowQualFinSF", "GrLivArea", "GarageArea", "EnclosedPorch", "3SsnPorch", "ScreenPorch", "PoolArea", "LotArea", "MasVnrArea")
+
 # Deal with factors, and log the numeric variables!
 for(variable in variables)
 {
@@ -51,10 +53,20 @@ for(variable in variables)
     levels <- sort(unique(df[[variable]]))
     df[[variable]] <- factor(df[[variable]],levels=levels)
   }
-  else if (is.numeric(df[[variable]])){ #now, only log the SF variables
+  # else if (variable %in% sf_vars){ #now, only log the SF variables -- this is giving lower score on Public LB
+  #   df[[variable]] = log(1 + df[[variable]])
+  # }
+  else if (is.numeric(df[[variable]])){
     df[[variable]] = log(1 + df[[variable]])
   }
 }
+
+# This is increasing RMSE :(
+# for (variable in sf_vars){
+#   new_var = paste(variable, "zero", sep = "_")
+#   df[[new_var]] = as.factor(df[[variable]] == 0)
+# }
+
 
 train$YrSold = as.factor(train$YrSold)
 price_ave = aggregate(SalePrice ~ YrSold, data = train, FUN = mean)
@@ -82,7 +94,7 @@ write.table(test_res, gzfile('./test.csv.gz'),quote=F,sep=',',row.names=F)
 
 train_h2o = h2o.uploadFile("./train.csv.gz", destination_frame = "house_prices_train")
 test_h2o = h2o.uploadFile("./test.csv.gz", destination_frame = "house_prices_test")
-
+#Try looking at moving averages, and better ways to impute missing vals, also remove outliers!
 rf = h2o.randomForest(x = variables, y = "SalePrice", training_frame = train_h2o, ntrees = 200, max_depth = 50)
 res = exp(predict(rf, test_h2o)) + 1
 sp = as.vector(res)
